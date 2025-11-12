@@ -25,18 +25,65 @@ from pathlib import Path
 from typing import Optional, Tuple
 
 import torch
-from loguru import logger
 from transformers import (
     AutoModelForCausalLM,
     AutoTokenizer,
     AutoConfig,
 )
 
+# Try to import coremltools early to give better error messages
 try:
     import coremltools as ct
+except ImportError as e:
+    print(f"ERROR: coremltools not installed. Run: pip install coremltools>=8.2")
+    print(f"Details: {e}")
+    sys.exit(1)
+except Exception as e:
+    print(f"ERROR: Failed to import coremltools: {e}")
+    print(f"You have coremltools installed but there's an import error.")
+    print(f"Try: pip install --upgrade coremltools")
+    sys.exit(1)
+
+# Import loguru after coremltools check
+from loguru import logger
+
+# Configure basic logging immediately (will be reconfigured later in main)
+logger.remove()  # Remove default handler
+logger.add(sys.stderr, format="<level>{level}</level>: {message}", level="DEBUG")
+
+# Check coremltools version
+try:
+    ct_version = tuple(map(int, ct.__version__.split('.')[:2]))
+    logger.debug(f"Detected coremltools version: {ct.__version__}")
+
+    if ct_version >= (9, 0):
+        logger.warning(
+            f"You have coremltools {ct.__version__}. "
+            "This script was tested with 8.x. Some APIs may have changed."
+        )
+except Exception as e:
+    logger.warning(f"Could not parse coremltools version: {e}")
+
+# Now import CoreML components with version-aware handling
+try:
+    # Try coremltools 8.x import first
     from coremltools.models import ComputeUnit
 except ImportError:
-    logger.error("coremltools not installed. Run: pip install coremltools>=8.2")
+    try:
+        # Try coremltools 9.x import location
+        from coremltools import ComputeUnit
+    except ImportError as e:
+        print(f"ERROR: Failed to import ComputeUnit from coremltools: {e}")
+        print(f"Detected coremltools version: {ct.__version__}")
+        print(f"This script was tested with coremltools 8.x")
+        print(f"For coremltools 9.x, imports may have changed.")
+        print(f"Try downgrading: pip install 'coremltools>=8.2,<9.0'")
+        sys.exit(1)
+except AttributeError as e:
+    print(f"ERROR: ComputeUnit not found in coremltools: {e}")
+    print(f"Detected coremltools version: {ct.__version__}")
+    print(f"This script was tested with coremltools 8.x")
+    print(f"You may need to adjust imports for coremltools 9.0")
     sys.exit(1)
 
 
