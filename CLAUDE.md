@@ -10,48 +10,80 @@ ANEMLL (pronounced "animal") is an open-source project for accelerating Large La
 
 ### Environment Setup
 ```bash
-# Create Python 3.9 virtual environment (required)
-python -m venv anemll-env
-source anemll-env/bin/activate
+# Automated setup (recommended)
+./create_python39_env.sh          # Creates Python 3.9 virtual environment
+./install_dependencies.sh          # Installs dependencies (auto-detects venv)
+
+# Manual setup
+python3.9 -m venv env-anemll
+source env-anemll/bin/activate
 pip install -r requirements.txt
 
-# Install Xcode Command Line Tools (required for CoreML compilation)
-xcode-select --install
-xcrun --find coremlcompiler  # Verify installation
+# Verify installation
+xcode-select --install             # Required for CoreML compilation
+xcrun --find coremlcompiler        # Verify CoreML compiler
+python -c "import torch; print('MPS:', torch.backends.mps.is_available())"
 ```
 
-**Important**: Always activate the virtual environment before running any Python scripts in this repository:
+**Important**: Always activate the virtual environment before running any Python scripts:
 ```bash
-source env-anemll/bin/activate  # or anemll-env/bin/activate depending on your setup
+source env-anemll/bin/activate  # or anemll-env/bin/activate
 ```
 
-You can verify the environment is active by checking:
-- The prompt should show `(env-anemll)` or `(anemll-env)`
-- `which python` should point to the virtual environment's Python
-- `python --version` should show Python 3.9.x
+Verify the environment is active:
+- Prompt shows `(env-anemll)` or `(anemll-env)`
+- `which python` points to virtual environment
+- `python --version` shows Python 3.9.x
 
 ### Model Conversion
+
 ```bash
-# Single-shot model conversion script
+# Single-shot conversion script (main entry point)
 ./anemll/utils/convert_model.sh --model <path_to_model> --output <output_directory>
 
-# With additional options
+# With quantization and chunking
 ./anemll/utils/convert_model.sh \
     --model ./models/llama-3.1-1b \
     --output ./converted_models \
     --context 512 \
     --batch 64 \
-    --lut2 4 \
-    --lut3 6 \
-    --chunk 2
+    --lut2 4 \      # FFN quantization (4-bit)
+    --lut3 6 \      # LM head quantization (6-bit)
+    --chunk 2       # Number of FFN chunks
 ```
 
-### Testing and Chat Interfaces
+The conversion script automatically:
+1. Detects model architecture (LLaMA, Qwen, DeepSeek)
+2. Converts embeddings, FFN, and LM head separately
+3. Applies LUT quantization (4-bit for FFN, 6-bit for LM head)
+4. Chunks large models to fit ANE constraints
+5. Compiles to CoreML format
+6. Creates meta.yaml configuration
+
+### Testing
+
 ```bash
-# Basic chat interface (quick testing)
+# Quick model tests (downloads models automatically)
+python tests/test_qwen_model.py      # Test Qwen 3 conversion
+python tests/test_qwen2.5_model.py   # Test Qwen 2.5 conversion
+python tests/test_llama_model.py     # Test LLaMA conversion
+
+# Generic HuggingFace model testing
+./tests/conv/test_hf_model.sh <model_name> [output_dir] [chunks]
+
+# Examples:
+./tests/conv/test_hf_model.sh meta-llama/Llama-3.2-1B-Instruct
+./tests/conv/test_hf_model.sh Qwen/Qwen2.5-0.5B-Instruct /tmp/my-test
+./tests/conv/test_hf_model.sh meta-llama/Llama-3.2-8B-Instruct /tmp/llama8b 4
+```
+
+### Chat Interfaces
+
+```bash
+# Basic chat (quick testing)
 python ./tests/chat.py --meta ./converted_models/meta.yaml
 
-# Advanced chat with conversation history
+# Full conversation mode (maintains history, handles context window)
 python ./tests/chat_full.py --meta ./converted_models/meta.yaml
 
 # Manual model specification
@@ -64,7 +96,22 @@ python ./tests/chat.py \
     --d ./converted_models
 ```
 
+### Model Evaluation
+
+```bash
+# Evaluate with lm-evaluation-harness
+python evaluate/ane/evaluate_with_harness.py \
+    --model /path/to/model \
+    --tasks boolq,arc_easy,hellaswag \
+    --batch-size 1 \
+    --num-shots 0
+
+# Run evaluation suite
+./run_ane_evaluations.sh <model_path> <output_dir>
+```
+
 ### Swift CLI Development
+
 ```bash
 # Build Swift CLI
 cd anemll-swift-cli
@@ -77,99 +124,148 @@ swift run anemllcli --help
 swift test
 ```
 
-### Development Tools
-```bash
-# Code formatting (Python)
-black anemll/ tests/ examples/
-flake8 anemll/ tests/ examples/
-
-# Install development dependencies
-pip install -e ".[dev]"
-```
-
 ## Architecture Overview
 
 ### Core Components
 
 1. **ANE Converter Pipeline** (`anemll/ane_converter/`)
-   - `base_converter.py`: Abstract base class for model converters
+   - `base_converter.py`: Abstract base class defining conversion interface
    - `llama_converter.py`: LLaMA/DeepSeek model conversion
-   - `qwen_converter.py`: Qwen model conversion
+   - `qwen_converter.py`: Qwen 3 model conversion
+   - `qwen2_5_converter.py`: Qwen 2.5 model conversion
    - `deepseek_converter.py`: DeepSeek-specific optimizations
-   - Converts models in 3 parts: embeddings (part 1), FFN/prefill (part 2), LM head (part 3)
+   - `metadata.py`: Model metadata and configuration
+   - `optimization_rules.py`: ANE-specific optimization rules
 
 2. **Model Implementations** (`anemll/models/`)
-   - `base_model.py`: Abstract base model with weight loading interface
-   - `llama_model.py`: LLaMA architecture implementation
-   - `qwen_model.py`: Qwen architecture implementation
-   - `deepseek_model.py`: DeepSeek architecture implementation
+   - `base_model.py`: Abstract base with weight loading interface
+   - `llama_model.py`: LLaMA architecture (reference implementation)
+   - `qwen_model.py`: Qwen 3 architecture
+   - `qwen2_5_model.py`: Qwen 2.5 architecture
+   - `deepseek_model.py`: DeepSeek architecture
 
 3. **Utilities** (`anemll/utils/`)
+   - `convert_model.sh`: Main conversion orchestration script
    - `combine_models.py`: Combines chunked FFN models
    - `compile_models.py`: CoreML compilation with LUT quantization
-   - `convert_model.sh`: Main conversion orchestration script
+   - `generate_meta_yaml.py`: Creates deployment configuration
 
 4. **Swift Implementation** (`anemll-swift-cli/`)
-   - `AnemllCore`: Core inference engine for Swift applications
    - `InferenceManager.swift`: Manages model inference pipeline
    - `ModelLoader.swift`: Loads and manages CoreML models
    - `Tokenizer.swift`: Tokenization handling
    - `YAMLConfig.swift`: Configuration file parsing
+   - `FFNChunk.swift`: FFN chunk management
 
 5. **iOS/macOS Sample App** (`anemll-chatbot/`)
    - SwiftUI-based chat interface
-   - Model management and downloading
-   - Core ML inference integration
+   - Model downloading and management
+   - CoreML inference integration
 
-### Conversion Pipeline
+6. **Evaluation Infrastructure** (`evaluate/ane/`)
+   - `evaluate_with_harness.py`: lm-evaluation-harness integration
+   - Direct CoreML integration with ANE models
+   - Support for standard benchmarks (BoolQ, ARC, HellaSwag, etc.)
 
-The model conversion follows an 8-step process:
-1. Convert embeddings (part 1) with optional LUT quantization
-2. Convert LM head (part 3) with optional LUT quantization
-3. Convert FFN layers (part 2) with chunking and optional LUT quantization
-4. Convert prefill attention (part 2_prefill)
-5. Combine chunked models
-6. Compile all parts to CoreML format
-7. Copy tokenizer files and create meta.yaml configuration
-8. Test with chat interface
+### Conversion Pipeline (8-Step Process)
+
+The model conversion follows this workflow:
+
+1. **Convert Embeddings** (part 1) - Token embeddings with optional LUT quantization
+2. **Convert LM Head** (part 3) - Language model head with LUT quantization (typically 6-bit)
+3. **Convert FFN Layers** (part 2) - Feed-forward network with chunking and LUT quantization (typically 4-bit)
+4. **Convert Prefill Attention** (part 2_prefill) - Attention mechanism for prefill phase
+5. **Combine Chunked Models** - Merges FFN chunks into unified model
+6. **Compile to CoreML** - Generates .mlmodelc or .mlpackage files
+7. **Create Configuration** - Copies tokenizer files and creates meta.yaml
+8. **Test with Chat** - Validates with chat interface
 
 ### Key Design Patterns
 
-- **Multi-part Architecture**: Models are split into 3 main parts for ANE optimization
-- **Chunking Strategy**: FFN layers are chunked to fit ANE memory constraints
-- **LUT Quantization**: Lookup table quantization for different model parts (4-bit, 6-bit)
-- **Meta Configuration**: YAML-based model configuration for easy deployment
+- **Multi-part Architecture**: Models split into 3 parts for ANE optimization (embeddings, FFN/attention, LM head)
+- **Chunking Strategy**: FFN layers chunked to fit ANE memory constraints (typical: 2-4 chunks)
+- **LUT Quantization**: Lookup table quantization (4-bit for FFN, 6-bit for LM head, optional for embeddings)
+- **Meta Configuration**: YAML-based deployment configuration for easy model loading
+- **State Management**: Separate KV cache handling for efficient sequential generation
 
 ### ANE-Specific Implementation Requirements
 
 **CRITICAL**: When implementing models for ANE (Apple Neural Engine) compatibility:
 
-1. **RMSNorm Implementation**: Always use ANE-aware RMSNorm that:
-   - Subtracts the mean first: `hidden_states = hidden_states - mean`
-   - Then uses `F.layer_norm()` instead of manual computation
-   - Example:
-   ```python
-   def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-       mean = hidden_states.mean(-1, keepdim=True)
-       hidden_states = hidden_states - mean
-       return F.layer_norm(hidden_states, self.weight.shape, self.weight, bias=None, eps=float(self.eps))
-   ```
-   - This is REQUIRED for ANE compatibility - standard RMSNorm without mean subtraction will fail on ANE
+#### 1. RMSNorm Implementation (REQUIRED)
 
-2. **Conv2d Layers**: All dense layers must be expressed as `nn.Conv2d` with `kernel_size=1`
+**NEVER** implement "true" RMSNorm (variance-only normalization) - it causes precision issues on ANE.
 
-3. **Weight Reshaping**: Weights from HuggingFace models need proper reshaping for Conv2d format
+**ALWAYS** follow this pattern from `llama_model.py`:
+
+```python
+def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+    mean = hidden_states.mean(-1, keepdim=True)
+    hidden_states = hidden_states - mean
+    return F.layer_norm(hidden_states, self.weight.shape, self.weight, bias=None, eps=float(self.eps)).to(TEST_DEVICE).to(MODEL_DTYPE)
+```
+
+Why this matters:
+- Subtracts mean FIRST (converts to LayerNorm-like operation)
+- Uses `F.layer_norm()` instead of manual variance computation
+- Standard RMSNorm without mean subtraction will fail on ANE
+
+#### 2. Conv2d Layer Requirements
+
+All dense layers MUST be `nn.Conv2d` with `kernel_size=(1,1)` - NEVER use `nn.Linear`:
+
+```python
+# Correct for ANE
+self.q_proj = nn.Conv2d(hidden_size, hidden_size, kernel_size=(1, 1))
+
+# Incorrect - will not run on ANE
+self.q_proj = nn.Linear(hidden_size, hidden_size)
+```
+
+#### 3. Tensor Shape Constraints
+
+- Tensor ranks MUST be ≤4 with dimensions `(N, C, H, W)`
+- Height/Width dimensions MUST NOT exceed 16,384 elements
+- Channel dimension MUST NOT exceed 65,536 elements
+- Maintain trailing dimension ≥64 for better ANE tiling
+
+#### 4. Weight Reshaping
+
+Reshape HuggingFace weights from `(out, in)` to `(out, in, 1, 1)` for Conv2d:
+
+```python
+# Loading weights from HuggingFace
+hf_weight = hf_model.weight  # Shape: (out_features, in_features)
+conv_weight = hf_weight.unsqueeze(-1).unsqueeze(-1)  # Shape: (out, in, 1, 1)
+```
+
+#### 5. Device and Dtype Management
+
+Always use `.to(TEST_DEVICE).to(MODEL_DTYPE)` at the end of forward passes:
+
+```python
+# Correct
+output = F.layer_norm(hidden_states, ...).to(TEST_DEVICE).to(MODEL_DTYPE)
+
+# Required constants
+MODEL_DTYPE = torch.float16  # Must be float16 throughout
+```
+
+- Initialize all parameters on correct device in `__init__`
+- Maintain consistent dtype (float16) across entire pipeline
+- Never let tensors drift to different devices or dtypes
 
 ### Testing Infrastructure
 
-The project includes extensive testing files (test_*.py) focusing on:
-- KV cache implementations and correctness
-- CoreML vs PyTorch output comparison
-- Sequential token generation validation
-- Attention mechanism testing
-- Single vs multi-token inference verification
+The project includes extensive testing organized in `tests/dev/`:
 
-These tests are primarily for development validation rather than CI/CD.
+- **KV Cache Testing**: `test_kv_cache_*.py`, `debug_kv_*.py`
+- **CoreML vs PyTorch Comparison**: `test_pytorch_vs_coreml.py`, `test_coreml_vs_pytorch.py`
+- **Sequential Generation**: `test_sequential_tokens.py`, `test_coreml_sequential.py`
+- **Architecture-Specific**: `test_llama_model.py`, `test_qwen_model.py`
+- **Attention Mechanisms**: `debug_attention_*.py`, `debug_rotary_emb.py`
+
+See `tests/dev/README.md` for complete catalog.
 
 ## Development Guidelines
 
@@ -183,28 +279,75 @@ When working on:
 - **Model validation**: Create comparison scripts in `./tests/dev/test_<model>_vs_<reference>.py`
 - **Development utilities**: Place tools in `./tests/dev/` with descriptive names
 
-**Never** create test or debug files directly in the root directory. This keeps the project structure clean and professional.
+**Never** create test or debug files directly in the root directory.
 
-See `./tests/dev/README.md` for a complete catalog of existing development files organized by architecture and purpose.
+### Adding New Model Architecture Support
 
-## Requirements
+1. **Copy Closest Existing Model**
+   - Start with `llama_model.py` for transformer-based architectures
+   - Rename all classes to match new architecture
 
-- **System**: macOS Sequoia with Apple Neural Engine
-- **Memory**: Minimum 16GB RAM
-- **Python**: 3.9 (strictly required)
-- **Dependencies**: coremltools>=8.2, transformers>=4.36.0, numpy>=1.24.0, scikit-learn<=1.5.1
+2. **Implement ANE-Compatible Layers**
+   - Use Conv2d instead of Linear
+   - Follow RMSNorm mean-subtraction pattern
+   - Ensure device/dtype preservation throughout
+
+3. **Create Converter**
+   - Subclass `BaseConverter` in `anemll/ane_converter/`
+   - Implement weight loading and reshaping
+   - Handle architecture-specific optimizations
+
+4. **Test Numerical Parity**
+   - Compare against HuggingFace reference implementation
+   - Verify KV cache correctness
+   - Test sequential generation
+
+5. **Update Documentation**
+   - Add to supported models list
+   - Document any architecture-specific quirks
+
+### Code Quality Requirements
+
+- Format with `black` and `ruff` - zero linter warnings
+- Write unit tests verifying shape parity and deterministic inference
+- Test without internet access requirement (use cached models)
+- Follow existing patterns from `llama_model.py`
+
+### Common Pitfalls to Avoid
+
+- **Don't modify `llama_model.py`** - it's the reference implementation
+- **Don't subclass new models from LLaMA** - copy and rename instead
+- **Don't use "true" RMSNorm** - always subtract mean first
+- **Don't use Linear layers** - use Conv2d with kernel_size=(1,1)
+- **Don't mix dtypes** - maintain float16 throughout
+- **Don't create files in root** - use `tests/dev/` for development
+
+## System Requirements
+
+- **System**: macOS Sequoia with Apple Neural Engine (Apple Silicon)
+- **Memory**: Minimum 16GB RAM (32GB recommended for 8B models)
+- **Python**: 3.9-3.11 (3.9 strongly recommended for best compatibility)
 - **Tools**: Xcode Command Line Tools for coremlcompiler
+- **Dependencies**: coremltools>=8.2, transformers>=4.36.0, numpy>=1.24.0, scikit-learn<=1.5.1
 
 ## Model Support
 
-Currently supports:
-- LLaMA 3.1/3.2 (1B, 8B variants)
-- Qwen 3 (0.6B, 8B)
-- DeepSeek R1 (8B distilled)
-- DeepHermes (3B, 8B)
+### Fully Supported (Stable)
+- **LLaMA 3.1/3.2** (1B, 8B variants)
+- **DeepSeek R1** (8B distilled)
+- **DeepHermes** (3B, 8B)
 
-Pre-converted models available at https://huggingface.co/anemll
+### Experimental (Alpha)
+- **Qwen 3** (0.6B, 1.7B, 4B)
+- **Qwen 2.5** (0.5B-Instruct, 1.5B, 3B, 7B)
 
-#QWEN TEST
-export_coreml.py is a test file for Qwen export development
-test_coreml_kvcache_sequential.py is a test file for Qwen inference development
+### Context Lengths
+- **Recommended**: 512-1024 tokens for optimal ANE performance
+- **Verified**: Up to 4K tokens
+- **Theoretical**: Qwen supports up to 32K
+
+### Pre-converted Models
+Available at https://huggingface.co/anemll:
+- iOS-friendly builds (unzipped .mlmodelc)
+- Standard builds for macOS development
+- Multiple quantization levels (FP16, LUT4, LUT6)

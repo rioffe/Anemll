@@ -1,0 +1,99 @@
+# ANEMLL Dependencies - UV Setup
+# Optimized for Python 3.11 with PyTorch 2.7.0
+# Uses Apple internal PyPI: https://pypi.apple.com/simple
+# Install with: uv pip install -r requirements-uv.txt --index-url https://pypi.apple.com/simple
+
+# ============================================================================
+# Installation Command
+# ============================================================================
+# uv pip install -r requirements-uv.txt --index-url https://pypi.apple.com/simple
+#
+# Or install PyTorch separately then the rest:
+# uv pip install torch==2.7.0 torchvision torchaudio --index-url https://pypi.apple.com/simple
+# uv pip install -r requirements-uv.txt --index-url https://pypi.apple.com/simple
+# ============================================================================
+
+# ============================================================================
+# Core ML Framework
+# ============================================================================
+torch==2.7.0                  # Deep learning framework (specific version for stability)
+torchvision                   # Computer vision utilities
+torchaudio                    # Audio processing utilities
+
+# ============================================================================
+# Apple Neural Engine Support
+# ============================================================================
+coremltools>=8.2              # Required for ANE model conversion and compilation
+
+# ============================================================================
+# Model & Tokenization
+# ============================================================================
+transformers>=4.39.0          # Hugging Face Transformers library
+tokenizers                    # Fast tokenization library
+sentencepiece                 # Tokenization for some model types
+safetensors                   # Safe tensor serialization
+
+# ============================================================================
+# Scientific Computing
+# ============================================================================
+numpy>=1.24.0                 # Array operations and numerical computing
+scikit-learn<=1.5.1           # CRITICAL: Required for LUT quantization in CoreML
+                              # Must be <=1.5.1 for proper ANE quantization support
+
+# ============================================================================
+# Model Utilities
+# ============================================================================
+datasets                      # Dataset loading and processing
+accelerate                    # Distributed training and inference
+huggingface_hub              # Model downloading and repository management
+
+# ============================================================================
+# Evaluation
+# ============================================================================
+lm-evaluation-harness>=0.4.9  # Standard benchmark evaluation suite
+
+# ============================================================================
+# Configuration & Utilities
+# ============================================================================
+pyyaml                        # YAML configuration file handling
+tqdm>=4.66.0                  # Progress bars for long-running operations
+psutil>=5.9.0                 # System monitoring
+
+# ============================================================================
+# Development Dependencies
+# ============================================================================
+black>=23.12.0                # Code formatting
+flake8>=7.0.0                 # Code linting
+pytest>=7.4.0                 # Testing framework
+pytest-cov>=4.1.0             # Test coverage reporting
+jupyter                       # Jupyter notebook support
+ipykernel                     # IPython kernel for Jupyter
+
+# ============================================================================
+# Optional Visualization
+# ============================================================================
+matplotlib                    # Plotting and visualization
+seaborn                       # Statistical data visualization
+
+# ============================================================================
+# Installation Notes
+# ============================================================================
+#
+# Apple Internal PyPI:
+#   All packages installed from: https://pypi.apple.com/simple
+#
+# Quick install:
+#   uv pip install -r requirements-uv.txt --index-url https://pypi.apple.com/simple
+#
+# With PyTorch (recommended):
+#   uv pip install torch==2.7.0 torchvision torchaudio --index-url https://pypi.apple.com/simple
+#   uv pip install -r requirements-uv.txt --index-url https://pypi.apple.com/simple
+#
+# Important constraints:
+#   - scikit-learn MUST be <=1.5.1 for CoreML LUT quantization
+#   - PyTorch 2.7.0 is pinned for stability with Python 3.11
+#   - CoreML Tools >=8.2 required for latest ANE features
+#
+# For development mode installation:
+#   uv pip install -e . --index-url https://pypi.apple.com/simple
+#
