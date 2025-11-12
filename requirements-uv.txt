@@ -48,9 +48,15 @@ accelerate                    # Distributed training and inference
 huggingface_hub              # Model downloading and repository management
 
 # ============================================================================
-# Evaluation
+# Evaluation (Optional - may not be in Apple PyPI)
 # ============================================================================
-lm-evaluation-harness>=0.4.9  # Standard benchmark evaluation suite
+# lm-evaluation-harness>=0.4.9  # Standard benchmark evaluation suite
+#
+# Note: This package may not be available in Apple's internal PyPI.
+# To install from public PyPI if needed:
+#   uv pip install lm-evaluation-harness --index-url https://pypi.org/simple
+#
+# The install_dependencies_uv.sh script will skip this if not available.
 
 # ============================================================================
 # Configuration & Utilities

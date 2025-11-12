@@ -113,7 +113,14 @@ This installs:
 - CoreML Tools >=8.2
 - Transformers, tokenizers, etc.
 - Development tools (black, pytest, etc.)
-- Evaluation harness for benchmarks
+- Evaluation harness (if available in Apple PyPI)
+
+**Note**: Some packages like `lm-evaluation-harness` may not be available in Apple's internal PyPI and will be skipped automatically. You can install them manually from public PyPI if needed:
+
+```bash
+# Install lm-evaluation-harness from public PyPI if needed
+uv pip install lm-evaluation-harness --index-url https://pypi.org/simple
+```
 
 **Manual installation** (if you prefer):
 ```bash
@@ -242,6 +249,32 @@ python evaluate/ane/evaluate_with_harness.py \
 | Requirements File | `requirements.txt` | `requirements-uv.txt` |
 
 ## Troubleshooting
+
+### Package Not Found in Apple PyPI
+
+Some packages (like `lm-evaluation-harness`) may not be available in Apple's internal PyPI.
+
+**Solution 1: Skip the package** (if optional)
+The installation script will automatically skip unavailable packages and continue.
+
+**Solution 2: Install from public PyPI**
+```bash
+# Install specific package from public PyPI
+uv pip install <package-name> --index-url https://pypi.org/simple
+
+# Example: lm-evaluation-harness
+uv pip install lm-evaluation-harness --index-url https://pypi.org/simple
+```
+
+**Solution 3: Mix sources in requirements file**
+You can create a custom requirements file that uses different sources:
+```bash
+# Install most packages from Apple PyPI
+uv pip install -r requirements-uv.txt --index-url https://pypi.apple.com/simple
+
+# Install missing packages from public PyPI
+uv pip install lm-evaluation-harness --index-url https://pypi.org/simple
+```
 
 ### "uv: command not found"
 

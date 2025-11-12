@@ -93,10 +93,15 @@ uv pip install tokenizers --index-url $APPLE_PYPI
 uv pip install sentencepiece --index-url $APPLE_PYPI
 uv pip install pyyaml --index-url $APPLE_PYPI
 
-# Install evaluation dependencies
+# Install evaluation dependencies (optional, may not be in Apple PyPI)
 echo ""
 echo "📊 Installing evaluation dependencies..."
-uv pip install "lm-evaluation-harness>=0.4.9" --index-url $APPLE_PYPI
+echo "   Attempting to install lm-evaluation-harness..."
+if ! uv pip install "lm-evaluation-harness>=0.4.9" --index-url $APPLE_PYPI 2>/dev/null; then
+    echo "   ⚠️  lm-evaluation-harness not found in Apple PyPI"
+    echo "   ℹ️  Skipping lm-evaluation-harness (can install manually if needed)"
+    echo "   To install manually: uv pip install lm-evaluation-harness --index-url https://pypi.org/simple"
+fi
 
 # Install development dependencies
 echo ""
@@ -163,9 +168,9 @@ python -c "import numpy; print(f'✅ {numpy.__version__}')" 2>/dev/null || echo 
 echo -n "scikit-learn: "
 python -c "import sklearn; print(f'✅ {sklearn.__version__}')" 2>/dev/null || echo "❌ Failed"
 
-# Verify lm-evaluation-harness
+# Verify lm-evaluation-harness (optional)
 echo -n "lm-eval-harness: "
-python -c "import lm_eval; print(f'✅ {lm_eval.__version__}')" 2>/dev/null || echo "❌ Failed"
+python -c "import lm_eval; print(f'✅ {lm_eval.__version__}')" 2>/dev/null || echo "⚠️  Not installed (optional)"
 
 # Check Xcode Command Line Tools
 echo ""

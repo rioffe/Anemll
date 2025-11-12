@@ -78,6 +78,12 @@ Full guide: [`docs/uv_setup.md`](docs/uv_setup.md)
 ## Important Notes
 
 - **Apple PyPI**: All packages are installed from `https://pypi.apple.com/simple`
+- **Package Availability**: Some packages (like `lm-evaluation-harness`) may not be in Apple PyPI
+  - These will be skipped automatically during installation
+  - You can install them manually from public PyPI if needed:
+    ```bash
+    uv pip install lm-evaluation-harness --index-url https://pypi.org/simple
+    ```
 - **Compatibility**: All ANEMLL commands work identically between setups
 - **Models**: Converted models are compatible between standard and UV setups
 - **Coexistence**: This setup can coexist with the standard setup (different environment names)
